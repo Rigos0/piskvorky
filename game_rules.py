@@ -158,7 +158,7 @@ class Search:
 
 
     def initialise_search_tree(self):
-        self.root_node = Node(None, None)
+        self.root_node = Node(None)
 
 
     def add_nodes(self, policy, parent):
@@ -168,19 +168,48 @@ class Search:
                     node = Node(policy[row_index*15 + column_index], parent)
                     parent.children.append(node)
 
+    # select which leaf node to expand
+    def selection(self, node):
+        for child in node.children:
+            # find node with the highest ucb
+            # pseudo - dodelat
+            highest_ucb_node = node
+
+        if highest_ucb_node.children:
+            # the node is not a leaf node, so traverse the tree further
+            highest_ucb_node = self.selection(highest_ucb_node)
+
+        return highest_ucb_node
+
+    #
+    def expand(self, from_node):
+        actions = get_actions()
+
+        for action in actions:
+            from_node.children.append(Node(policy, from_node.side*-1))
+
+
     def MCTS(self):
+        self.selection(self.root_node)
+
         pass
 
 
 
 class Node:
-    def __init__(self, policy, parent):
+    def __init__(self, policy, move):
         self.number_of_visits = int
         self.number_of_wins = int
-        self.intial_policy = policy
-        self.parent_node = parent
+        self.initial_policy = policy
         self.children = []
         self.side_to_move = None
+        self.move = move
+
+
+
+
+
+
 
 
 
