@@ -1,25 +1,24 @@
 import numpy as np
 import math
-from tensorflow import keras
-import tensorflow as tf
+# from tensorflow import keras
+# import tensorflow as tf
 import time
 
 
 
-gpus = tf.config.experimental.list_physical_devices('GPU')
-if gpus:
-    try:
-        # Currently, memory growth needs to be the same across GPUs
-        for gpu in gpus:
-            tf.config.experimental.set_memory_growth(gpu, True)
-        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-        print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
-    except RuntimeError as e:
-        # Memory growth must be set before GPUs have been initialized
-        print(e)
-model = keras.models.load_model('value_network')
-policy_model  = keras.models.load_model('policy_model')
-
+# gpus = tf.config.experimental.list_physical_devices('GPU')
+# if gpus:
+#     try:
+#         # Currently, memory growth needs to be the same across GPUs
+#         for gpu in gpus:
+#             tf.config.experimental.set_memory_growth(gpu, True)
+#         logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+#         print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+#     except RuntimeError as e:
+#         # Memory growth must be set before GPUs have been initialized
+#         print(e)
+# model = keras.models.load_model('value_network')
+# policy_model  = keras.models.load_model('policy_model')
 
 
 
@@ -120,6 +119,11 @@ class Board:
 
 
 class Search:
+    def __init__(self):
+        self.root_node = None
+        self.side_to_move = 1
+
+
     def normalise_policy(self, policy):
         policy = policy
         # Remove illegal moves from policy
@@ -142,15 +146,180 @@ class Search:
             # thanks to the simple board representation, this is very elegant
             matrix = board.board * -1
             yield matrix
-        # # rotaterotate rotate trotate rotate rotoaoteao and rottate
-        # for i in range(1,4):
-        #     yield np.rot90(matrix, k=i)
-        # matrix = np.flip(matrix)
-        # yield matrix
-        # for i in range(1, 4):
-        #     yield np.rot90(matrix, k=i)
+
+    def get_policy(self):
+        l = [board.board]
+        l = np.asarray(l)
+        # l = l * -1
+        policy_prediction = (policy_model.predict(tf.expand_dims(l, axis=-1)))
+        policy_prediction = np.ndarray.tolist(policy_prediction[0])
+
+        return policy_prediction
 
 
+    def initialise_search_tree(self):
+        self.root_node = Node(None, None)
+
+
+    def add_nodes(self, policy, parent):
+        for row_index, row in enumerate(board.board):
+            for column_index, column in enumerate(row):
+                if not column:
+                    node = Node(policy[row_index*15 + column_index], parent)
+                    parent.children.append(node)
+
+    def MCTS(self):
+        pass
+
+
+
+class Node:
+    def __init__(self, policy, parent):
+        self.number_of_visits = int
+        self.number_of_wins = int
+        self.intial_policy = policy
+        self.parent_node = parent
+        self.children = []
+        self.side_to_move = None
+
+
+
+class StaticEvaluation:
+    def evaluate_position(self, position):
+        streaks = {
+            "three_half_open": 0,
+            "three_open": 0,
+            "four_half_open": 0,
+            "four_open": 0,
+            "five": 0,
+            "three_half_open_2": 0,
+            "three_open_2": 0,
+            "four_half_open_2": 0,
+            "four_open_2": 0,
+            "five_2": 0
+        }
+        radky, diagonaly_nahoru = self.vrat_radky_a_diagonalu(position)
+        position = np.rot90(position)
+        sloupce, diagonaly_dolu = self.vrat_radky_a_diagonalu(position)
+        vsechno = (radky, sloupce, diagonaly_dolu, diagonaly_nahoru)
+        for i in vsechno:
+            for x in i:
+                streaks = self.one_dimension_eval(x, streaks)
+
+
+        return streaks
+
+    def vrat_radky_a_diagonalu(self, position):
+        radky = []
+
+        diagonaly_nahoru = []
+        for i in range(29):
+            diagonaly_nahoru.append([])
+        for radek_index, radek in enumerate(position):
+            radky.append(radek)
+            for pozice_index, pozice in enumerate(radek):
+                diagonaly_nahoru[self.do_jaky_diagonaly(radek_index, pozice_index)].append(pozice)
+
+        return radky, diagonaly_nahoru
+
+    def do_jaky_diagonaly(self, radek_index, pozice_index):
+        index = pozice_index - radek_index
+        if index < 0:
+            index = 14 + index*-1
+        return index
+
+
+
+    def one_dimension_eval(self, list_of_positions, streaks):
+        current_side = None
+        row_length = 0
+
+
+        for i, position in enumerate(list_of_positions):
+            if position != 0:
+                # prodluzujeme nalezeny streak
+                if position == current_side:
+                    row_length += 1
+                # zacina novy streak
+                else:
+                    if row_length >= 3:
+                        streaks = self.get_streak_info(list_of_positions, row_length,
+                                                       streak_start_index, i-1, current_side, streaks)
+                    current_side = position
+                    streak_start_index = i
+                    row_length = 1
+
+            else:
+                if row_length >= 3:
+                    streaks = self.get_streak_info(list_of_positions, row_length, streak_start_index, i-1, current_side,
+                                                   streaks)
+                current_side = None
+                row_length = 0
+
+        if row_length >= 3:
+            streaks = self.get_streak_info(list_of_positions, row_length, streak_start_index,
+                                           len(list_of_positions) - 1, current_side, streaks)
+
+        return streaks
+
+    def get_streak_info(self, list_of_positions, streak_length, streak_start_index, streak_end_index, side,
+                        streaks):
+        list_length = len(list_of_positions)
+        closed_in_front = False
+        closed_from_back = False
+        # zjistime jestli je streak uzavreny, polootevreny nebo otevreny
+        if streak_length == 3 or streak_length == 4:
+            # check for space in front
+            if streak_start_index != 0:
+                if list_of_positions[streak_start_index-1] != 0:
+                    closed_in_front = True
+            else:
+                closed_in_front = True
+            # check for space behind streak
+            if streak_end_index != list_length-1:
+                if list_of_positions[streak_end_index+1] != 0:
+                    closed_from_back = True
+            else:
+                closed_from_back = True
+        # vyhrava pouze presne 5 kamenu v rade, proto ted zjistime jestli nam streak dlouhy 4 nesousedi
+        # ob jednu mezeru s dalsim kamenem te same barvy
+        if streak_length == 4:
+            # zkontrolujeme ob mezeru pred
+            if streak_start_index > 1 and not closed_in_front:
+                if list_of_positions[streak_start_index-2] == side:
+                    closed_in_front = True
+            # zkontrolujeme mezeru za streakem
+            if streak_end_index < list_length - 2 and not closed_from_back:
+                if list_of_positions[streak_end_index+2] == side:
+                    closed_from_back = True
+
+        if side == 1:
+            if streak_length == 5:
+                streaks["five"] += 1
+            elif streak_length == 4 and (closed_from_back ^ closed_in_front):
+                streaks["four_half_open"] += 1
+            elif streak_length == 4 and (not closed_from_back and not closed_in_front):
+                streaks["four_open"] += 1
+            elif streak_length == 3 and (closed_from_back ^ closed_in_front):
+                streaks["three_half_open"] += 1
+            elif streak_length == 3 and (not closed_from_back and not closed_in_front):
+                streaks["three_open"] += 1
+        else:
+            if streak_length == 5:
+                streaks["five"] += 1
+            elif streak_length == 4 and (closed_from_back ^ closed_in_front):
+                streaks["four_half_open_2"] += 1
+            elif streak_length == 4 and (not closed_from_back and not closed_in_front):
+                streaks["four_open_2"] += 1
+            elif streak_length == 3 and (closed_from_back ^ closed_in_front):
+                streaks["three_half_open_2"] += 1
+            elif streak_length == 3 and (not closed_from_back and not closed_in_front):
+                streaks["three_open_2"] += 1
+
+        return streaks
+
+
+s = StaticEvaluation()
 search = Search()
 board = Board()
 
@@ -165,10 +334,14 @@ def play():
         l = np.asarray(l)
         l = l*-1
         # prediction = (model.predict(tf.expand_dims(l, axis=-1)))
-        policy_prediction = (policy_model.predict(tf.expand_dims(l, axis=-1)))
-        policy_prediction = np.ndarray.tolist(policy_prediction[0])
-
-
+        # policy_prediction = (policy_model.predict(tf.expand_dims(l, axis=-1)))
+        # policy_prediction = np.ndarray.tolist(policy_prediction[0])
+        start = time.time()
+        for i in range(1000):
+            eval = s.evaluate_position(board.board)
+        end = time.time()
+        print(eval)
+        print("time: ", end - start)
 
         # print(prediction[0][1], prediction[0][0])
 
@@ -183,10 +356,10 @@ def play():
 
         l = [board.board]
         l = np.asarray(l)
-        policy_prediction = (policy_model.predict(tf.expand_dims(l, axis=-1)))
-        policy_prediction = np.ndarray.tolist(policy_prediction[0])
-        print(policy_prediction)
-        print("best_move", policy_prediction.index(max(policy_prediction)))
+        # policy_prediction = (policy_model.predict(tf.expand_dims(l, axis=-1)))
+        # policy_prediction = np.ndarray.tolist(policy_prediction[0])
+        # print(policy_prediction)
+        # print("best_move", policy_prediction.index(max(policy_prediction)))
 
         # print(model.predict(tf.expand_dims(l, axis=-1)))
 
@@ -209,5 +382,5 @@ def test_speed():
 
     end = time.time()
     print(end-start)
-# test_speed()
-# play()
+
+play()
