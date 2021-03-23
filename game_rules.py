@@ -1,7 +1,7 @@
 import numpy as np
 import math
-# from tensorflow import keras
-# import tensorflow as tf
+from tensorflow import keras
+import tensorflow as tf
 import time
 
 
@@ -19,8 +19,6 @@ import time
 #         print(e)
 # model = keras.models.load_model('value_network')
 # policy_model  = keras.models.load_model('policy_model')
-
-
 
 
 class Board:
@@ -122,9 +120,12 @@ class Search:
     def __init__(self):
         self.root_node = None
         self.side_to_move = 1
+        self.tree_path = []
+        self.how_many_moves_consider = 20
+        self.policy_model = keras.models.load_model('policy_model')
 
-
-    def normalise_policy(self, policy):
+    @staticmethod
+    def normalise_policy(policy):
         policy = policy
         # Remove illegal moves from policy
         index = 0
@@ -137,84 +138,114 @@ class Search:
 
         return policy
 
-    def get_matrix_representation(self, move_number):
-        # if it is player 1 to move
-        if move_number % 2 == 0:
-            matrix = board.board
-            yield matrix
-        else:
-            # thanks to the simple board representation, this is very elegant
-            matrix = board.board * -1
-            yield matrix
-
-    def get_policy(self):
-        l = [board.board]
-        l = np.asarray(l)
-        # l = l * -1
-        policy_prediction = (policy_model.predict(tf.expand_dims(l, axis=-1)))
+    def get_policy(self, side_to_move):
+        position = [board.board]
+        position = np.asarray(position) * side_to_move
+        policy_prediction = (self.policy_model.predict(tf.expand_dims(position, axis=-1)))
         policy_prediction = np.ndarray.tolist(policy_prediction[0])
 
         return policy_prediction
 
+    # vyplivne x nejlepsich tahu podle neural networku
+    def get_top_moves(self, policy):
+        for i in range(self.how_many_moves_consider):
+            maxi = max(policy)
+            max_index = policy.index(maxi)
+            yield maxi, max_index
+            policy[max_index] = 0
 
-    def initialise_search_tree(self):
-        self.root_node = Node(None)
+    def return_to_root_position(self):
+        for node in self.tree_path:
+            board.board[node.move[0]][node.move[1]] = 0
+        self.tree_path.clear()
 
-
-    def add_nodes(self, policy, parent):
-        for row_index, row in enumerate(board.board):
-            for column_index, column in enumerate(row):
-                if not column:
-                    node = Node(policy[row_index*15 + column_index], parent)
-                    parent.children.append(node)
+    def initialise_search_tree(self, side_to_move):
+        self.root_node = Node(None, None, side_to_move)
 
     # select which leaf node to expand
     def selection(self, node):
-        for child in node.children:
-            # find node with the highest ucb
-            # pseudo - dodelat
-            highest_ucb_node = node
+        if not node.children:
+            if node.visited:
+                self.expand(node)
+                self.return_to_root_position()
 
-        if highest_ucb_node.children:
-            # the node is not a leaf node, so traverse the tree further
-            highest_ucb_node = self.selection(highest_ucb_node)
+            else:
+                static_evaluation = static_eval.evaluate_position(board.board, node.side_to_move)
+                self.backpropagate(static_evaluation)
+                node.visited = True
 
-        return highest_ucb_node
+        else:
+            ucbs = []
+            for child in node.children:
+                # find node with the highest ucb
+                ucb = child.get_upper_confidence_bound(self.root_node.visits)
+                ucbs.append(ucb)
 
-    #
+            # choose the node with the highest ucbs
+            next_node = node.children[ucbs.index(max(ucbs))]
+            self.tree_path.append(next_node)
+            board.add_position(next_node.move[0], next_node.move[1], node.side)
+            self.selection(next_node)
+
+    # udelame deti a pridame je na konec stromu
     def expand(self, from_node):
-        actions = get_actions()
+        policies = self.get_policy(from_node.side_to_move)
+        for policy, move_index in self.get_top_moves(policies):
+            newborn_child = Node(policy, move_index, from_node.side*-1)
+            from_node.children.append(newborn_child)
 
-        for action in actions:
-            from_node.children.append(Node(policy, from_node.side*-1))
+    # propagate the static eval value back to the tree
+    def backpropagate(self, value):
+        for i in range(len(self.tree_path)):
+            # colours are ascillating (win for one side is a lost position for the other)
+            index = -i-1
+            self.tree_path[index].visits += 1
+            self.tree_path[index].static_evaluation = value
+            value = 1 - value
+            # return the move
+            # (this could be done in the function return to root node, but it would
+            # be slower
+            board.board[self.tree_path[index].move[0]][self.tree_path[index].move[1]] = 0
+        self.root_node.visits += 1
+        self.tree_path.clear()
 
+    def find_the_best_move(self):
+        for node in self.root_node.children:
+            pass
 
-    def MCTS(self):
+        return node.move
+
+    def MCTS(self, side_to_move):
+        self.initialise_search_tree(side_to_move)
         self.selection(self.root_node)
 
-        pass
 
 
 
+
+# z Nodes budeme stavet search tree
 class Node:
-    def __init__(self, policy, move):
-        self.number_of_visits = int
-        self.number_of_wins = int
+    def __init__(self, policy, move, side):
+        self.number_of_visits = 0.001
+        self.static_evaluation = 0
         self.initial_policy = policy
         self.children = []
-        self.side_to_move = None
-        self.move = move
+        self.side_to_move = side
+        if move:
+            self.move = (move//15, move % 15)
+        self.visited = False
 
+    # kazda node ma svuj upper confidence bound, podle ktereho se budeme rozhodovat jakou
+    # node zvolit
+    def get_upper_confidence_bound(self, N):
+        expl_constant = 2
+        exploration = expl_constant * math.sqrt((math.log(N))/self.number_of_visits)
 
-
-
-
-
-
+        return self.static_evaluation + exploration * self.initial_policy
 
 
 class StaticEvaluation:
-    def evaluate_position(self, position):
+    def evaluate_position(self, position, side_to_move):
         streaks = {
             "three_half_open": 0,
             "three_open": 0,
@@ -251,18 +282,16 @@ class StaticEvaluation:
 
         return radky, diagonaly_nahoru
 
-    def do_jaky_diagonaly(self, radek_index, pozice_index):
+    @staticmethod
+    def do_jaky_diagonaly(radek_index, pozice_index):
         index = pozice_index - radek_index
         if index < 0:
             index = 14 + index*-1
         return index
 
-
-
     def one_dimension_eval(self, list_of_positions, streaks):
         current_side = None
         row_length = 0
-
 
         for i, position in enumerate(list_of_positions):
             if position != 0:
@@ -291,7 +320,8 @@ class StaticEvaluation:
 
         return streaks
 
-    def get_streak_info(self, list_of_positions, streak_length, streak_start_index, streak_end_index, side,
+    @staticmethod
+    def get_streak_info(list_of_positions, streak_length, streak_start_index, streak_end_index, side,
                         streaks):
         list_length = len(list_of_positions)
         closed_in_front = False
@@ -348,7 +378,7 @@ class StaticEvaluation:
         return streaks
 
 
-s = StaticEvaluation()
+static_eval = StaticEvaluation()
 search = Search()
 board = Board()
 
@@ -364,14 +394,7 @@ def play():
         l = l*-1
         # prediction = (model.predict(tf.expand_dims(l, axis=-1)))
         # policy_prediction = (policy_model.predict(tf.expand_dims(l, axis=-1)))
-        # policy_prediction = np.ndarray.tolist(policy_prediction[0])
-        start = time.time()
-        for i in range(1000):
-            eval = s.evaluate_position(board.board)
-        end = time.time()
-        print(eval)
-        print("time: ", end - start)
-
+        # policy_prediction = np.ndarray.tolist(policy_prediction[0]
         # print(prediction[0][1], prediction[0][0])
 
         board.is_there_five_in_row(1, (r,c))
