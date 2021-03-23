@@ -3,22 +3,21 @@ import math
 from tensorflow import keras
 import tensorflow as tf
 import time
+import random
 
-
-
-# gpus = tf.config.experimental.list_physical_devices('GPU')
-# if gpus:
-#     try:
-#         # Currently, memory growth needs to be the same across GPUs
-#         for gpu in gpus:
-#             tf.config.experimental.set_memory_growth(gpu, True)
-#         logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-#         print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
-#     except RuntimeError as e:
-#         # Memory growth must be set before GPUs have been initialized
-#         print(e)
-# model = keras.models.load_model('value_network')
-# policy_model  = keras.models.load_model('policy_model')
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if gpus:
+    try:
+        # Currently, memory growth needs to be the same across GPUs
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+        logical_gpus = tf.config.experimental.list_logical_devices('GPU')
+        print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+    except RuntimeError as e:
+        # Memory growth must be set before GPUs have been initialized
+        print(e)
+model = keras.models.load_model('value_network')
+policy_model  = keras.models.load_model('policy_model')
 
 
 class Board:
@@ -30,7 +29,7 @@ class Board:
 
     def index_to_move(self, index):
         row = index // 15
-        column = index%15
+        column = index % 15
 
         return (row, column)
 
@@ -50,7 +49,7 @@ class Board:
         return directions
 
     def get_directons(self, square):
-        directions = [(-1,-1), (-1,0), (-1,1), (0,-1), (0,1), (1,-1), (1,0), (1,1)]
+        directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
 
         if square[1] == 0:
             directions = self.remove_directions((None, -1), directions)
@@ -79,9 +78,9 @@ class Board:
             checked_directions.append(d)
 
             # opposite direction
-            if (d[0]*-1, d[1]*-1) in directions:
-                row_length = self.how_many_in_row(added_move, (d[0]*-1, d[1]*-1), side_to_move, row_length)
-                checked_directions.append((d[0]*-1, d[1]*-1))
+            if (d[0] * -1, d[1] * -1) in directions:
+                row_length = self.how_many_in_row(added_move, (d[0] * -1, d[1] * -1), side_to_move, row_length)
+                checked_directions.append((d[0] * -1, d[1] * -1))
 
             if row_length == 5:
                 return True
@@ -106,7 +105,7 @@ class Board:
     def print_board(self, board):
         for i in range(15):
             string = "|"
-            for square in board[14-i]:
+            for square in board[14 - i]:
                 if int(square) == 0:
                     string += "_|"
                 if int(square) == 1:
@@ -126,7 +125,6 @@ class Search:
 
     @staticmethod
     def normalise_policy(policy):
-        policy = policy
         # Remove illegal moves from policy
         index = 0
         for row in board.board:
@@ -148,11 +146,22 @@ class Search:
 
     # vyplivne x nejlepsich tahu podle neural networku
     def get_top_moves(self, policy):
+        policies = []
+        indicies = []
         for i in range(self.how_many_moves_consider):
             maxi = max(policy)
             max_index = policy.index(maxi)
-            yield maxi, max_index
+            move = board.index_to_move(max_index)
+            if board.board[move[0]][move[1]] == 0:
+                policies.append(maxi)
+                indicies.append(max_index)
             policy[max_index] = 0
+
+        policies_sum = sum(policies)
+        ratio = 100/policies_sum
+        for i in range(len(policies)):
+            policies[i] *= ratio
+            yield policies[i], indicies[i]
 
     def return_to_root_position(self):
         for node in self.tree_path:
@@ -170,8 +179,8 @@ class Search:
                 self.return_to_root_position()
 
             else:
-                static_evaluation = static_eval.evaluate_position(board.board, node.side_to_move)
-                self.backpropagate(static_evaluation)
+                static_evaluation, win = static_eval.evaluate_position(board.board, node.side)
+                self.backpropagate(static_evaluation,win)
                 node.visited = True
 
         else:
@@ -184,23 +193,32 @@ class Search:
             # choose the node with the highest ucbs
             next_node = node.children[ucbs.index(max(ucbs))]
             self.tree_path.append(next_node)
+
             board.add_position(next_node.move[0], next_node.move[1], node.side)
             self.selection(next_node)
 
     # udelame deti a pridame je na konec stromu
     def expand(self, from_node):
-        policies = self.get_policy(from_node.side_to_move)
+
+        policies = self.get_policy(from_node.side)
         for policy, move_index in self.get_top_moves(policies):
-            newborn_child = Node(policy, move_index, from_node.side*-1)
+            newborn_child = Node(policy, move_index, from_node.side * -1)
             from_node.children.append(newborn_child)
 
     # propagate the static eval value back to the tree
-    def backpropagate(self, value):
+    def backpropagate(self, value, win):
+        if win:
+            print("I SEEEEEEEEEEEEEE WIIIIIIIIIIIIIIn")
+            if self.tree_path:
+                self.tree_path[-1].value = 1000
+                if len(self.tree_path) > 1:
+                    self.tree_path[-2].value = -1000
+
         for i in range(len(self.tree_path)):
             # colours are ascillating (win for one side is a lost position for the other)
-            index = -i-1
+            index = -i - 1
             self.tree_path[index].visits += 1
-            self.tree_path[index].static_evaluation = value
+            self.tree_path[index].value += value
             value = 1 - value
             # return the move
             # (this could be done in the function return to root node, but it would
@@ -217,47 +235,55 @@ class Search:
 
     def MCTS(self, side_to_move):
         self.initialise_search_tree(side_to_move)
-        self.selection(self.root_node)
+        for i in range(500):
+            self.selection(self.root_node)
 
-
-
+        max_visits, best_move = 0, None
+        for child in self.root_node.children:
+            if child.visits > max_visits:
+                max_visits = child.visits
+                best_move = child.move
+        board.add_position(best_move[0], best_move[1], side_to_move)
+        return best_move
 
 
 # z Nodes budeme stavet search tree
 class Node:
     def __init__(self, policy, move, side):
-        self.number_of_visits = 0.001
-        self.static_evaluation = 0
+        self.visits = 0.001
+        self.value = 0
         self.initial_policy = policy
         self.children = []
-        self.side_to_move = side
+        self.side = side
         if move:
-            self.move = (move//15, move % 15)
+            self.move = (move // 15, move % 15)
         self.visited = False
 
     # kazda node ma svuj upper confidence bound, podle ktereho se budeme rozhodovat jakou
     # node zvolit
     def get_upper_confidence_bound(self, N):
         expl_constant = 2
-        exploration = expl_constant * math.sqrt((math.log(N))/self.number_of_visits)
+        exploration = expl_constant * math.sqrt((math.log(N)) / self.visits)
 
-        return self.static_evaluation + exploration * self.initial_policy
+        return self.value/self.visits + exploration * self.initial_policy
 
 
 class StaticEvaluation:
     def evaluate_position(self, position, side_to_move):
-        streaks = {
-            "three_half_open": 0,
-            "three_open": 0,
-            "four_half_open": 0,
-            "four_open": 0,
-            "five": 0,
-            "three_half_open_2": 0,
-            "three_open_2": 0,
-            "four_half_open_2": 0,
-            "four_open_2": 0,
-            "five_2": 0
-        }
+        # vysvetleni streaku
+        # streaks = {
+        #     "three_half_open": 0,
+        #     "three_open": 0,
+        #     "four_half_open": 0,
+        #     "four_open": 0,
+        #     "five": 0,
+        #     "three_half_open_2": 0,
+        #     "three_open_2": 0,
+        #     "four_half_open_2": 0,
+        #     "four_open_2": 0,
+        #     "five_2": 0
+        # }
+        streaks = [[0,0,0,0,0], [0,0,0,0,0]]
         radky, diagonaly_nahoru = self.vrat_radky_a_diagonalu(position)
         position = np.rot90(position)
         sloupce, diagonaly_dolu = self.vrat_radky_a_diagonalu(position)
@@ -266,8 +292,29 @@ class StaticEvaluation:
             for x in i:
                 streaks = self.one_dimension_eval(x, streaks)
 
+        win = self.vyhrali_jsme_otaznik(side_to_move, streaks)
+        cislo = self.udelej_cislo_z_nalezeneho_infa_o_pozici(streaks, side_to_move)
+        return cislo, win
 
-        return streaks
+    def side_to_index(self, side):
+        if side == 1:
+            side_index = 0
+        else:
+            side_index = 1
+        return side_index
+
+    def udelej_cislo_z_nalezeneho_infa_o_pozici(self, info, side_to_move):
+        evaluation = random.uniform(0,1)
+
+        return 0.5
+
+    def vyhrali_jsme_otaznik(self, side, info):
+        index = self.side_to_index(side)
+        vyhra = False
+        if info[index][3] > 0 or info[index][4] > 0:
+            vyhra = True
+        return vyhra
+
 
     def vrat_radky_a_diagonalu(self, position):
         radky = []
@@ -286,7 +333,7 @@ class StaticEvaluation:
     def do_jaky_diagonaly(radek_index, pozice_index):
         index = pozice_index - radek_index
         if index < 0:
-            index = 14 + index*-1
+            index = 14 + index * -1
         return index
 
     def one_dimension_eval(self, list_of_positions, streaks):
@@ -302,14 +349,15 @@ class StaticEvaluation:
                 else:
                     if row_length >= 3:
                         streaks = self.get_streak_info(list_of_positions, row_length,
-                                                       streak_start_index, i-1, current_side, streaks)
+                                                       streak_start_index, i - 1, current_side, streaks)
                     current_side = position
                     streak_start_index = i
                     row_length = 1
 
             else:
                 if row_length >= 3:
-                    streaks = self.get_streak_info(list_of_positions, row_length, streak_start_index, i-1, current_side,
+                    streaks = self.get_streak_info(list_of_positions, row_length, streak_start_index, i - 1,
+                                                   current_side,
                                                    streaks)
                 current_side = None
                 row_length = 0
@@ -330,13 +378,13 @@ class StaticEvaluation:
         if streak_length == 3 or streak_length == 4:
             # check for space in front
             if streak_start_index != 0:
-                if list_of_positions[streak_start_index-1] != 0:
+                if list_of_positions[streak_start_index - 1] != 0:
                     closed_in_front = True
             else:
                 closed_in_front = True
             # check for space behind streak
-            if streak_end_index != list_length-1:
-                if list_of_positions[streak_end_index+1] != 0:
+            if streak_end_index != list_length - 1:
+                if list_of_positions[streak_end_index + 1] != 0:
                     closed_from_back = True
             else:
                 closed_from_back = True
@@ -345,75 +393,34 @@ class StaticEvaluation:
         if streak_length == 4:
             # zkontrolujeme ob mezeru pred
             if streak_start_index > 1 and not closed_in_front:
-                if list_of_positions[streak_start_index-2] == side:
+                if list_of_positions[streak_start_index - 2] == side:
                     closed_in_front = True
             # zkontrolujeme mezeru za streakem
             if streak_end_index < list_length - 2 and not closed_from_back:
-                if list_of_positions[streak_end_index+2] == side:
+                if list_of_positions[streak_end_index + 2] == side:
                     closed_from_back = True
 
         if side == 1:
-            if streak_length == 5:
-                streaks["five"] += 1
-            elif streak_length == 4 and (closed_from_back ^ closed_in_front):
-                streaks["four_half_open"] += 1
-            elif streak_length == 4 and (not closed_from_back and not closed_in_front):
-                streaks["four_open"] += 1
-            elif streak_length == 3 and (closed_from_back ^ closed_in_front):
-                streaks["three_half_open"] += 1
-            elif streak_length == 3 and (not closed_from_back and not closed_in_front):
-                streaks["three_open"] += 1
+            index = 0
         else:
-            if streak_length == 5:
-                streaks["five"] += 1
-            elif streak_length == 4 and (closed_from_back ^ closed_in_front):
-                streaks["four_half_open_2"] += 1
-            elif streak_length == 4 and (not closed_from_back and not closed_in_front):
-                streaks["four_open_2"] += 1
-            elif streak_length == 3 and (closed_from_back ^ closed_in_front):
-                streaks["three_half_open_2"] += 1
-            elif streak_length == 3 and (not closed_from_back and not closed_in_front):
-                streaks["three_open_2"] += 1
+            index = 1
 
+        if streak_length == 5:
+            streaks[index][4] += 1
+        elif streak_length == 4 and (closed_from_back ^ closed_in_front):
+            streaks[index][2] += 1
+        elif streak_length == 4 and (not closed_from_back and not closed_in_front):
+            streaks[index][3] += 1
+        elif streak_length == 3 and (closed_from_back ^ closed_in_front):
+            streaks[index][0] += 1
+        elif streak_length == 3 and (not closed_from_back and not closed_in_front):
+            streaks[index][1] += 1
         return streaks
 
 
 static_eval = StaticEvaluation()
 search = Search()
 board = Board()
-
-def play():
-    move_number = 0
-    while True:
-        board.print_board(board.board)
-        r = int(input("row: "))
-        c = int(input("column: "))
-        board.add_position(r, c, 1)
-        l = [board.board]
-        l = np.asarray(l)
-        l = l*-1
-        # prediction = (model.predict(tf.expand_dims(l, axis=-1)))
-        # policy_prediction = (policy_model.predict(tf.expand_dims(l, axis=-1)))
-        # policy_prediction = np.ndarray.tolist(policy_prediction[0]
-        # print(prediction[0][1], prediction[0][0])
-
-        board.is_there_five_in_row(1, (r,c))
-
-
-        board.print_board(board.board)
-        r = int(input("row: "))
-        c = int(input("column: "))
-        board.add_position(r, c, -1)
-        board.is_there_five_in_row(-1, (r,c))
-
-        l = [board.board]
-        l = np.asarray(l)
-        # policy_prediction = (policy_model.predict(tf.expand_dims(l, axis=-1)))
-        # policy_prediction = np.ndarray.tolist(policy_prediction[0])
-        # print(policy_prediction)
-        # print("best_move", policy_prediction.index(max(policy_prediction)))
-
-        # print(model.predict(tf.expand_dims(l, axis=-1)))
 
 def test_speed():
     l = [board.board]
@@ -430,9 +437,39 @@ def test_speed():
         l = tf.expand_dims(l, axis=-1)
         value = policy_model(l, training=False)
 
-
-
     end = time.time()
-    print(end-start)
+    print(end - start)
 
-play()
+
+def play(side):
+    board.print_board(board.board)
+    if side == 1:
+        print(search.MCTS(side))
+    else:
+        r = int(input("row: "))
+        c = int(input("column: "))
+        board.add_position(r, c, side)
+    # l = [board.board]
+    # l = np.asarray(l)
+    # l = l * -1
+    # prediction = (model.predict(tf.expand_dims(l, axis=-1)))
+    # policy_prediction = (policy_model.predict(tf.expand_dims(l, axis=-1)))
+
+    # policy_prediction = np.ndarray.tolist(policy_prediction[0]
+    # print(prediction[0][1], prediction[0][0])
+    # search.MCTS(side)
+    print(static_eval.evaluate_position(board.board, side))
+
+def main():
+    side = 1
+    while True:
+        play(side)
+        side *= -1
+
+
+
+
+
+
+
+main()
