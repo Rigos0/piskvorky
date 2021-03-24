@@ -120,7 +120,7 @@ class Search:
         self.root_node = None
         self.side_to_move = 1
         self.tree_path = []
-        self.how_many_moves_consider = 20
+        self.how_many_moves_consider = 75
         self.policy_model = keras.models.load_model('policy_model')
 
     @staticmethod
@@ -148,7 +148,7 @@ class Search:
     def get_top_moves(self, policy):
         policies = []
         indicies = []
-        for i in range(self.how_many_moves_consider):
+        while len(policies) != self.how_many_moves_consider:
             maxi = max(policy)
             max_index = policy.index(maxi)
             move = board.index_to_move(max_index)
@@ -179,8 +179,8 @@ class Search:
                 self.return_to_root_position()
 
             else:
-                static_evaluation, win = static_eval.evaluate_position(board.board, node.side)
-                self.backpropagate(static_evaluation,win)
+                static_evaluation, win, lose = static_eval.evaluate_position(board.board, node.side)
+                self.backpropagate(static_evaluation,win, lose)
                 node.visited = True
 
         else:
@@ -193,9 +193,12 @@ class Search:
             # choose the node with the highest ucbs
             next_node = node.children[ucbs.index(max(ucbs))]
             self.tree_path.append(next_node)
-
             board.add_position(next_node.move[0], next_node.move[1], node.side)
+            # board.print_board(board.board)
+            # print("\n\n")
+
             self.selection(next_node)
+
 
     # udelame deti a pridame je na konec stromu
     def expand(self, from_node):
@@ -206,13 +209,18 @@ class Search:
             from_node.children.append(newborn_child)
 
     # propagate the static eval value back to the tree
-    def backpropagate(self, value, win):
-        if win:
-            print("I SEEEEEEEEEEEEEE WIIIIIIIIIIIIIIn")
+    def backpropagate(self, value, win, lose):
+        if win or lose:
+            if win:
+                end_value = -1000
+            else:
+                end_value = 1000
+            # print("I SEEEEEEEEEEEEEE WIIIIIIIIIIIIIIN")
             if self.tree_path:
-                self.tree_path[-1].value = 1000
+                self.tree_path[-1].value = end_value
+                # print(vars(self.tree_path[-1]))
                 if len(self.tree_path) > 1:
-                    self.tree_path[-2].value = -1000
+                    self.tree_path[-2].value = end_value*-1
 
         for i in range(len(self.tree_path)):
             # colours are ascillating (win for one side is a lost position for the other)
@@ -235,15 +243,19 @@ class Search:
 
     def MCTS(self, side_to_move):
         self.initialise_search_tree(side_to_move)
-        for i in range(500):
+        for i in range(7500):
             self.selection(self.root_node)
 
         max_visits, best_move = 0, None
+        print("moves considered")
         for child in self.root_node.children:
+            print(child.value, child.move)
+            # print(vars(child))
             if child.visits > max_visits:
                 max_visits = child.visits
                 best_move = child.move
         board.add_position(best_move[0], best_move[1], side_to_move)
+
         return best_move
 
 
@@ -262,10 +274,10 @@ class Node:
     # kazda node ma svuj upper confidence bound, podle ktereho se budeme rozhodovat jakou
     # node zvolit
     def get_upper_confidence_bound(self, N):
-        expl_constant = 2
+        expl_constant = 1
         exploration = expl_constant * math.sqrt((math.log(N)) / self.visits)
 
-        return self.value/self.visits + exploration * self.initial_policy
+        return (self.value*2)/self.visits + exploration * self.initial_policy
 
 
 class StaticEvaluation:
@@ -293,8 +305,11 @@ class StaticEvaluation:
                 streaks = self.one_dimension_eval(x, streaks)
 
         win = self.vyhrali_jsme_otaznik(side_to_move, streaks)
+        prohra = self.prohrali_jsme_otaznik(side_to_move, streaks)
         cislo = self.udelej_cislo_z_nalezeneho_infa_o_pozici(streaks, side_to_move)
-        return cislo, win
+        if cislo!= 0.5:
+            print(cislo)
+        return cislo, win, prohra
 
     def side_to_index(self, side):
         if side == 1:
@@ -304,16 +319,37 @@ class StaticEvaluation:
         return side_index
 
     def udelej_cislo_z_nalezeneho_infa_o_pozici(self, info, side_to_move):
-        evaluation = random.uniform(0,1)
+        index = self.side_to_index(side_to_move)
+        opacny = self.side_to_index(side_to_move*-1)
+        zavreny_trojky = info[index][0] - info[opacny][0]
+        otevreny_trojky = info[index][1] - info[opacny][1]*2
+        zavreny_ctyrky = info[index][2] - info[opacny][2]
+        if info[index][3] > 0:
+            return 1
+        elif info[opacny][3] > 0:
+            return 0
+        else:
+            x = zavreny_trojky/2 + otevreny_trojky + 1.5* zavreny_ctyrky
+            x /= 5
+            cislo = (int(np.tanh(x)) +1)/2
+            return cislo
 
-        return 0.5
+
 
     def vyhrali_jsme_otaznik(self, side, info):
         index = self.side_to_index(side)
         vyhra = False
-        if info[index][3] > 0 or info[index][4] > 0:
+        if info[index][4] > 0:
             vyhra = True
         return vyhra
+
+    def prohrali_jsme_otaznik(self, side, info):
+        index = self.side_to_index(side*-1)
+        prohra = False
+        if info[index][3] > 0 or info[index][4] > 0:
+            prohra = True
+        return prohra
+
 
 
     def vrat_radky_a_diagonalu(self, position):
@@ -460,6 +496,7 @@ def play(side):
     # search.MCTS(side)
     print(static_eval.evaluate_position(board.board, side))
 
+
 def main():
     side = 1
     while True:
@@ -467,9 +504,4 @@ def main():
         side *= -1
 
 
-
-
-
-
-
-main()
+# main()
