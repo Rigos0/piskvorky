@@ -1,14 +1,15 @@
-import keras
+""""" Slouzi k trainingu policy funkce z daneho datasetu"""""
+
+# armada knihoven na machine learning
 import numpy as np
 from keras.utils import to_categorical
 from keras.layers import *
 from keras.models import Sequential
 from keras.callbacks import EarlyStopping
 from keras.regularizers import l2
-
 import tensorflow as tf
 
-
+# reseni nejakeho bugu v Kerasu...
 gpus = tf.config.experimental.list_physical_devices('GPU')
 if gpus:
     try:
@@ -21,35 +22,23 @@ if gpus:
         # Memory growth must be set before GPUs have been initialized
         print(e)
 
-
-
-
-# y_train = np.load("values_test1.npy")
-# X_train = np.load("positons_test1.npy")
-
+""""" Nacti dataset """""
 X_train = np.load("positons_policies1.npy")
 X_train = tf.expand_dims(X_train, axis=-1)
-
 print(X_train.shape)
 
 y_train = np.load("policies1.npy")
-y_train = tf.keras.utils.to_categorical(y_train, num_classes=225)
-
-# y_train = tf.keras.utils.to_categorical(y_train, num_classes=2)
+y_train = to_categorical(y_train, num_classes=225)
 print(y_train)
 
 
 """""""""""""""""""""
 Network architecture
 """""""""""""""""""""
-
-
-
 LAYER1_SIZE = 16
 LAYER2_SIZE = 2
 
 L2_REGULARISATION = 0.0002
-
 
 model = Sequential()
 model.add(Conv2D(128, activation="relu", kernel_size=(5, 5),
@@ -57,10 +46,7 @@ model.add(Conv2D(128, activation="relu", kernel_size=(5, 5),
                  data_format="channels_first",
                  kernel_regularizer=l2(L2_REGULARISATION),
                  padding='same'))
-# model.add(Conv2D(128, activation="relu", kernel_size=(5, 5),
-#                  data_format="channels_first",
-#                  kernel_regularizer=l2(L2_REGULARISATION),
-#                  padding='same'))
+
 
 model.add(Conv2D(128, activation="relu", kernel_size=(3, 3),
                  data_format="channels_first",
