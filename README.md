@@ -6,7 +6,7 @@ A Python implementation of the game Piškvorky (Gomoku). Features an AI player i
 </p>
 
 
-This project originated as a Semestral Thesis for the Algoritmization 1 at MFF UK course in 2021.
+This project originated as a Semestral Thesis for the Algoritmization 1 at MFF UK course in 2020.
 
 ## Technical Details
 
