@@ -137,7 +137,7 @@ class Search:
         # dulezita promenna, udava kolik prvnich tahu z policy funkce proverovat
         self.how_many_moves_consider = 75
         # nacti neuronovou sit
-        self.policy_model = keras.models.load_model('policy_model')
+        self.policy_model = keras.models.load_model('policy_model_converted.h5')
         self.depth = 0
 
     # policy funkce nevi jake tahy se daji zahrat, takze vraci pravdepodobnost i pro
