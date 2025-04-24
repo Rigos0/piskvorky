@@ -2,7 +2,7 @@
 A Python implementation of the game Piškvorky (Gomoku). Features an AI player inspired by the AlphaGo algorithm.
 
 <p align="center">
-  <img width="400" alt="image" src="https://github.com/user-attachments/assets/7bcee6ac-3865-44cf-be6d-37c23972e446" />
+  <img width="600" alt="image" src="https://github.com/user-attachments/assets/7bcee6ac-3865-44cf-be6d-37c23972e446" />
 </p>
 
 
