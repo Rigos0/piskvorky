@@ -1,9 +1,12 @@
 # PyŠkvor (Piškvorky / Gomoku AI)
-<img width="400" alt="image" src="https://github.com/user-attachments/assets/7bcee6ac-3865-44cf-be6d-37c23972e446" />
+A Python implementation of the game Piškvorky (Gomoku). Features an AI player inspired by the AlphaGo algorithm.
 
-A Python implementation of the game Piškvorky (Gomoku, where the first player to get 5 in a row wins). This project features an AI player inspired by the AlphaZero algorithm.
+<p align="center">
+  <img width="400" alt="image" src="https://github.com/user-attachments/assets/7bcee6ac-3865-44cf-be6d-37c23972e446" />
+</p>
 
-This project originated as a Semestral Thesis for the Algoritmization 1 course in 2021.
+
+This project originated as a Semestral Thesis for the Algoritmization 1 at MFF UK course in 2021.
 
 ## Technical Details
 
@@ -11,6 +14,8 @@ The core of the AI combines a neural network with Monte Carlo Tree Search (MCTS)
 
 1.  **Neural Network (Policy Network):** Predicts promising moves from a given board state. It was trained via supervised learning using games played by established Gomoku engines.
 2.  **Monte Carlo Tree Search (MCTS):** Intelligently explores the game tree, using the policy network's predictions to guide the search.
+
+See pySkvor_dokumentace.docx for more information.
 
 
 ## Setup Instructions (using uv)
@@ -51,3 +56,12 @@ These instructions assume you have Python and `git` installed.
     This command will install all necessary dependencies specified in your `pyproject.toml` into the active virtual environment.
 
 ## Usage
+
+1.  **Running the Game:** Start the game by running the `main.py` file.
+2.  **Setting Think Time:** After starting, the program will ask in the terminal how many seconds PyŠkvor should think. For ideal performance, it's recommended to enter **20 seconds or more**. For a quick game, go for **5 seconds**.
+3.  **Game Board:** A window with the game board will appear. **You will be playing with the blue stones.**
+4.  **First Move:** Wait for the computer to make its first move.
+5.  **Your Move:** Make your move by clicking on any square on the game board.
+6.  **Important:** **Do not click** on the window while the computer is calculating its move.
+7.  **Continuing the Game:** Note that **the game does not automatically stop after one side wins.**
+8.  **New Game:** To start a new game restart the script.
