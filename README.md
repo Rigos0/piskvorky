@@ -1,4 +1,17 @@
-<img width="601" alt="image" src="https://github.com/user-attachments/assets/7bcee6ac-3865-44cf-be6d-37c23972e446" />
+# PyŠkvor (Piškvorky / Gomoku AI)
+<img width="400" alt="image" src="https://github.com/user-attachments/assets/7bcee6ac-3865-44cf-be6d-37c23972e446" />
+
+A Python implementation of the game Piškvorky (Gomoku, where the first player to get 5 in a row wins). This project features an AI player inspired by the AlphaZero algorithm.
+
+This project originated as a Semestral Thesis for the Algoritmization 1 course in 2021.
+
+## Technical Details
+
+The core of the AI combines a neural network with Monte Carlo Tree Search (MCTS):
+
+1.  **Neural Network (Policy Network):** Predicts promising moves from a given board state. It was trained via supervised learning using games played by established Gomoku engines.
+2.  **Monte Carlo Tree Search (MCTS):** Intelligently explores the game tree, using the policy network's predictions to guide the search.
+
 
 ## Setup Instructions (using uv)
 
